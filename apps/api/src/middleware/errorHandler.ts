@@ -1,5 +1,6 @@
 import type { ErrorRequestHandler, RequestHandler } from "express";
 import { ZodError } from "zod";
+import { logger } from "../config/logger";
 
 /** Throwable HTTP error carrying a status code. */
 export class HttpError extends Error {
@@ -32,7 +33,6 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
     return;
   }
 
-  // eslint-disable-next-line no-console
-  console.error(err);
+  logger.error(err);
   res.status(500).json({ error: "Internal Server Error" });
 };
