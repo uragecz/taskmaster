@@ -1,4 +1,4 @@
-import { Entity, Enum, Property } from "@mikro-orm/core";
+import { Entity, Enum, OptionalProps, Property } from "@mikro-orm/core";
 import { BaseEntity } from "./BaseEntity";
 
 export const PRIORITIES = ["low", "medium", "high"] as const;
@@ -15,6 +15,9 @@ export type Category = (typeof CATEGORIES)[number];
 
 @Entity()
 export class Todo extends BaseEntity {
+  // Properties with DB/runtime defaults — optional when creating via em.create().
+  [OptionalProps]?: "done" | "priority" | "category" | "createdAt" | "updatedAt";
+
   @Property({ type: "string" })
   text!: string;
 

@@ -5,6 +5,7 @@ import helmet from "helmet";
 import { env } from "./config/env";
 import { getORM } from "./db";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
+import { todoRouter } from "./modules/todos/routes";
 
 export function createApp(): Express {
   const app = express();
@@ -20,8 +21,7 @@ export function createApp(): Express {
     res.json({ status: "ok" });
   });
 
-  // Feature routes are mounted here (Fáze 1+).
-  // app.use("/api/todos", todoRouter);
+  app.use("/api/todos", todoRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
