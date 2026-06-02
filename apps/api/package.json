@@ -1,0 +1,47 @@
+{
+  "name": "@taskmaster/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "test": "vitest run",
+    "mikro-orm": "tsx node_modules/@mikro-orm/cli/cli.js",
+    "migration:create": "tsx node_modules/@mikro-orm/cli/cli.js migration:create",
+    "migration:up": "tsx node_modules/@mikro-orm/cli/cli.js migration:up",
+    "seed": "tsx src/seeders/seed.ts"
+  },
+  "dependencies": {
+    "@mikro-orm/core": "^6.4.0",
+    "@mikro-orm/migrations": "^6.4.0",
+    "@mikro-orm/postgresql": "^6.4.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "helmet": "^8.0.0",
+    "pino": "^9.5.0",
+    "pino-http": "^10.3.0",
+    "reflect-metadata": "^0.2.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@mikro-orm/cli": "^6.4.0",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^25.0.3",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.8"
+  },
+  "mikro-orm": {
+    "configPaths": [
+      "./src/mikro-orm.config.ts",
+      "./dist/mikro-orm.config.js"
+    ]
+  }
+}
