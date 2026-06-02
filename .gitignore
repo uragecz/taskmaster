@@ -31,10 +31,11 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (committed example is opted back in below)
+# env files (committed example + non-secret test config are opted back in)
 .env
 .env.*
 !.env.example
+!.env.test
 
 # vercel
 .vercel
