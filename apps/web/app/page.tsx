@@ -1,6 +1,8 @@
 "use client"
 
+import { todosApi } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   AlertCircle,
   Calendar,
@@ -14,7 +16,7 @@ import {
   Trash2,
   X,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 type Priority = "low" | "medium" | "high"
 type Category = "personal" | "work" | "shopping" | "health" | "other"
@@ -65,15 +67,7 @@ const priorityConfig = {
 }
 
 export default function Home() {
-  const [todos, setTodos] = useState<Todo[]>([])
-  const [categories, setCategories] = useState<CategoryInfo[]>([])
-  const [stats, setStats] = useState<Stats>({
-    total: 0,
-    completed: 0,
-    active: 0,
-    overdue: 0,
-  })
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
 
   // Form state
   const [text, setText] = useState("")
@@ -95,106 +89,73 @@ export default function Home() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editText, setEditText] = useState("")
 
-  const fetchTodos = () => {
-    const params = new URLSearchParams()
-    if (filterCategory !== "all") params.set("category", filterCategory)
-    if (filterPriority !== "all") params.set("priority", filterPriority)
-    if (filterStatus !== "all") params.set("status", filterStatus)
-    if (searchQuery) params.set("search", searchQuery)
+  // Build the query string from the active filters.
+  const params = new URLSearchParams()
+  if (filterCategory !== "all") params.set("category", filterCategory)
+  if (filterPriority !== "all") params.set("priority", filterPriority)
+  if (filterStatus !== "all") params.set("status", filterStatus)
+  if (searchQuery) params.set("search", searchQuery)
+  const queryString = params.toString()
 
-    fetch(`/api/todos?${params}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setTodos(data.todos)
-        setCategories(data.categories)
-        setStats(data.stats)
-        setLoading(false)
-      })
+  // Server state: todos + categories + stats come from a single GET.
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ["todos", queryString],
+    queryFn: () => todosApi.list(queryString),
+  })
+
+  const todos: Todo[] = data?.todos ?? []
+  const categories: CategoryInfo[] = data?.categories ?? []
+  const stats: Stats = data?.stats ?? {
+    total: 0,
+    completed: 0,
+    active: 0,
+    overdue: 0,
   }
 
-  useEffect(() => {
-    fetchTodos()
-  }, [filterCategory, filterPriority, filterStatus, searchQuery])
+  // Any mutation just refetches the list — todos + stats stay in sync.
+  const invalidateTodos = () =>
+    queryClient.invalidateQueries({ queryKey: ["todos"] })
 
-  const addTodo = async (e: React.FormEvent) => {
+  const createMutation = useMutation({
+    mutationFn: (body: unknown) => todosApi.create(body),
+    onSuccess: invalidateTodos,
+  })
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: unknown }) =>
+      todosApi.update(id, body),
+    onSuccess: invalidateTodos,
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => todosApi.remove(id),
+    onSuccess: invalidateTodos,
+  })
+
+  const addTodo = (e: React.FormEvent) => {
     e.preventDefault()
     if (!text.trim()) return
 
-    const tempId = Date.now()
-    const newTodo: Todo = {
-      id: tempId,
+    createMutation.mutate({
       text,
-      done: false,
       priority,
       category,
       dueDate: dueDate || undefined,
-      createdAt: new Date().toISOString(),
-    }
-    setTodos((prev) => [...prev, newTodo])
+    })
+
     setText("")
     setDueDate("")
     setPriority("medium")
     setCategory("other")
     setShowForm(false)
-
-    fetch("/api/todos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        text,
-        priority,
-        category,
-        dueDate: dueDate || undefined,
-      }),
-    })
-      .then((res) => res.json())
-      .then((created) => {
-        setTodos((prev) => prev.map((t) => (t.id === tempId ? created : t)))
-        setStats((s) => ({ ...s, total: s.total + 1, active: s.active + 1 }))
-      })
   }
 
   const toggleTodo = (id: number) => {
     const todo = todos.find((t) => t.id === id)
     if (!todo) return
-
-    setTodos((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              done: !t.done,
-              completedAt: !t.done ? new Date().toISOString() : undefined,
-            }
-          : t
-      )
-    )
-    setStats((s) => ({
-      ...s,
-      completed: todo.done ? s.completed - 1 : s.completed + 1,
-      active: todo.done ? s.active + 1 : s.active - 1,
-    }))
-
-    fetch("/api/todos", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, toggleDone: true }),
-    })
+    updateMutation.mutate({ id, body: { done: !todo.done } })
   }
 
   const deleteTodo = (id: number) => {
-    const todo = todos.find((t) => t.id === id)
-    setTodos((prev) => prev.filter((t) => t.id !== id))
-    if (todo) {
-      setStats((s) => ({
-        ...s,
-        total: s.total - 1,
-        completed: todo.done ? s.completed - 1 : s.completed,
-        active: !todo.done ? s.active - 1 : s.active,
-      }))
-    }
-
-    fetch(`/api/todos?id=${id}`, { method: "DELETE" })
+    deleteMutation.mutate(id)
   }
 
   const startEdit = (todo: Todo) => {
@@ -204,29 +165,12 @@ export default function Home() {
 
   const saveEdit = (id: number) => {
     if (!editText.trim()) return
-
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, text: editText } : t))
-    )
+    updateMutation.mutate({ id, body: { text: editText } })
     setEditingId(null)
-
-    fetch("/api/todos", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, text: editText }),
-    })
   }
 
   const updateTodoPriority = (id: number, newPriority: Priority) => {
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, priority: newPriority } : t))
-    )
-
-    fetch("/api/todos", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, priority: newPriority }),
-    })
+    updateMutation.mutate({ id, body: { priority: newPriority } })
   }
 
   const isOverdue = (todo: Todo) => {
