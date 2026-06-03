@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import bcrypt from "bcryptjs";
+import { env } from "../config/env";
 import { closeORM, initORM } from "../db";
 import { type Category, type Priority, Todo } from "../entities/Todo";
 import { User } from "../entities/User";
@@ -62,6 +63,10 @@ const SEED: SeedTodo[] = [
 ];
 
 async function seed(): Promise<void> {
+  if (env.NODE_ENV === "production") {
+    throw new Error("Refusing to seed demo data in production.");
+  }
+
   const orm = await initORM();
   const em = orm.em.fork();
 
