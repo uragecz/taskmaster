@@ -15,7 +15,7 @@ async function main(): Promise<void> {
   initRealtime(httpServer);
 
   httpServer.listen(env.PORT, () => {
-    logger.info(`🚀 API listening on http://localhost:${env.PORT}`);
+    logger.info(`API listening on http://localhost:${env.PORT}`);
   });
 
   const shutdown = async (signal: string): Promise<void> => {

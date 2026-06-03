@@ -16,8 +16,7 @@ WebSockets. Organized as a pnpm monorepo and fronted by a Caddy reverse proxy.
 | Gateway  | Caddy reverse proxy (single origin, automatic HTTPS in prod)              |
 | Tooling  | pnpm workspaces, Docker, Vitest + Supertest                              |
 
-See [`PLAN.md`](./PLAN.md) for the delivery strategy and [`HANDOVER.md`](./HANDOVER.md)
-for the remaining backlog.
+See [`HANDOVER.md`](./HANDOVER.md) for the remaining backlog.
 
 ## Architecture
 
@@ -119,6 +118,3 @@ Docker works (Hetzner, DigitalOcean, AWS EC2, …).
    `example.com` and Caddy provisions HTTPS automatically.
 4. Set production secrets (a real `JWT_SECRET`, drop `COOKIE_SECURE=false` so the
    cookie is `Secure`) and run `docker compose up -d --build`.
-
-> Behind a proxy, set `app.set("trust proxy", 1)` in the API so the per-IP rate
-> limiter sees the real client IP (tracked in `HANDOVER.md`).
