@@ -20,7 +20,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     logger.info(`${signal} received, shutting down...`);
-    httpServer.close();
+    await new Promise((r) => httpServer.close(r));
     await closeRealtime();
     await closeORM();
     process.exit(0);
