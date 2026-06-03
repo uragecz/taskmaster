@@ -1,35 +1,65 @@
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"
-const TODOS_URL = `${BASE_URL}/api/todos`
 const JSON_HEADERS = { "Content-Type": "application/json" }
 
-/** fetch wrapper that throws on non-2xx so React Query can surface errors. */
-async function request(url: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(url, init)
+export class ApiError extends Error {
+  constructor(public readonly status: number) {
+    super(`Request failed with status ${status}`)
+  }
+}
+
+/** fetch wrapper: sends the auth cookie and throws on non-2xx. */
+async function request(path: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    credentials: "include",
+    ...init,
+  })
   if (!res.ok) {
-    throw new Error(`Request failed with status ${res.status}`)
+    throw new ApiError(res.status)
   }
   return res
 }
 
-/** Thin client for the Express todos API. Keeps the base URL in one place. */
+const jsonBody = (body: unknown): RequestInit => ({
+  headers: JSON_HEADERS,
+  body: JSON.stringify(body),
+})
+
 export const todosApi = {
   list: (query: string) =>
-    request(`${TODOS_URL}?${query}`).then((res) => res.json()),
+    request(`/api/todos?${query}`).then((res) => res.json()),
 
   create: (body: unknown) =>
-    request(TODOS_URL, {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(body),
-    }).then((res) => res.json()),
+    request("/api/todos", { method: "POST", ...jsonBody(body) }).then((res) =>
+      res.json(),
+    ),
 
   update: (id: number, body: unknown) =>
-    request(`${TODOS_URL}/${id}`, {
-      method: "PATCH",
-      headers: JSON_HEADERS,
-      body: JSON.stringify(body),
-    }).then((res) => res.json()),
+    request(`/api/todos/${id}`, { method: "PATCH", ...jsonBody(body) }).then(
+      (res) => res.json(),
+    ),
 
-  remove: (id: number) =>
-    request(`${TODOS_URL}/${id}`, { method: "DELETE" }),
+  remove: (id: number) => request(`/api/todos/${id}`, { method: "DELETE" }),
+}
+
+export interface AuthUser {
+  id: number
+  email: string
+}
+
+type Credentials = { email: string; password: string }
+
+export const authApi = {
+  me: () => request("/api/auth/me").then((res) => res.json() as Promise<AuthUser>),
+
+  register: (body: Credentials) =>
+    request("/api/auth/register", { method: "POST", ...jsonBody(body) }).then(
+      (res) => res.json() as Promise<AuthUser>,
+    ),
+
+  login: (body: Credentials) =>
+    request("/api/auth/login", { method: "POST", ...jsonBody(body) }).then(
+      (res) => res.json() as Promise<AuthUser>,
+    ),
+
+  logout: () => request("/api/auth/logout", { method: "POST" }),
 }

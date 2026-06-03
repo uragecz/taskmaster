@@ -1,14 +1,21 @@
 "use client"
 
-import { todosApi } from "@/lib/api"
+import { authApi, todosApi } from "@/lib/api"
+import { useDebounce } from "@/lib/use-debounce"
 import { cn } from "@/lib/utils"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import {
   AlertCircle,
   Calendar,
   Check,
   Filter,
   Loader2,
+  LogOut,
   Plus,
   Search,
   Sparkles,
@@ -17,6 +24,7 @@ import {
   X,
 } from "lucide-react"
 import { useState } from "react"
+import { AuthForm } from "./auth-form"
 
 type Priority = "low" | "medium" | "high"
 type Category = "personal" | "work" | "shopping" | "health" | "other"
@@ -69,6 +77,19 @@ const priorityConfig = {
 export default function Home() {
   const queryClient = useQueryClient()
 
+  // Auth state: /me returns 401 (-> error) when not logged in.
+  const meQuery = useQuery({
+    queryKey: ["me"],
+    queryFn: authApi.me,
+    retry: false,
+  })
+  const user = meQuery.data
+
+  const logoutMutation = useMutation({
+    mutationFn: authApi.logout,
+    onSuccess: () => queryClient.clear(),
+  })
+
   // Form state
   const [text, setText] = useState("")
   const [priority, setPriority] = useState<Priority>("medium")
@@ -89,18 +110,24 @@ export default function Home() {
   const [editingId, setEditingId] = useState<number | null>(null)
   const [editText, setEditText] = useState("")
 
+  // Debounce search so we don't hit the API on every keystroke.
+  const debouncedSearch = useDebounce(searchQuery, 300)
+
   // Build the query string from the active filters.
   const params = new URLSearchParams()
   if (filterCategory !== "all") params.set("category", filterCategory)
   if (filterPriority !== "all") params.set("priority", filterPriority)
   if (filterStatus !== "all") params.set("status", filterStatus)
-  if (searchQuery) params.set("search", searchQuery)
+  if (debouncedSearch) params.set("search", debouncedSearch)
   const queryString = params.toString()
 
   // Server state: todos + categories + stats come from a single GET.
   const { data, isLoading: loading } = useQuery({
     queryKey: ["todos", queryString],
     queryFn: () => todosApi.list(queryString),
+    enabled: !!user,
+    // Keep showing the current list while a new filter/search loads.
+    placeholderData: keepPreviousData,
   })
 
   const todos: Todo[] = data?.todos ?? []
@@ -200,6 +227,18 @@ export default function Home() {
     searchQuery !== "",
   ].filter(Boolean).length
 
+  // Auth gate: spinner while checking, login form when logged out.
+  if (meQuery.isLoading) {
+    return (
+      <main className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-violet-400" />
+      </main>
+    )
+  }
+  if (!user) {
+    return <AuthForm />
+  }
+
   return (
     <main className="min-h-screen flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
@@ -207,6 +246,19 @@ export default function Home() {
       <div className="relative w-full max-w-2xl animate-in fade-in slide-in-from-bottom-8 duration-700">
         <div className="glass-card rounded-2xl p-8">
           {/* Header */}
+          <div className="flex items-center justify-end gap-3 mb-2 -mt-2">
+            <span className="text-xs text-muted-foreground truncate max-w-[180px]">
+              {user.email}
+            </span>
+            <button
+              onClick={() => logoutMutation.mutate()}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-white/5 transition-colors"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              Log out
+            </button>
+          </div>
+
           <header className="mb-6 space-y-2 text-center">
             <div className="inline-flex items-center justify-center p-2 rounded-2xl bg-white/5 mb-4 border border-white/5 ring-1 ring-white/10 shadow-lg">
               <Sparkles className="w-6 h-6 text-violet-400" />
