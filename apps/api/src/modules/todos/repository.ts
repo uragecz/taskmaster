@@ -26,7 +26,11 @@ export class TodoRepository {
     else if (filters.status === "active") where.done = false;
     if (filters.search) where.text = { $ilike: `%${filters.search}%` };
 
-    return this.em.find(Todo, where, { orderBy: { createdAt: "asc" } });
+    // Unfinished first, then by due date (overdue/today on top, no due date
+    // last — Postgres sorts NULLs last for ASC), newest-created as a tiebreak.
+    return this.em.find(Todo, where, {
+      orderBy: { done: "asc", dueDate: "asc", createdAt: "asc" },
+    });
   }
 
   findById(id: number, userId: number): Promise<Todo | null> {

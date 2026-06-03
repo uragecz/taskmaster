@@ -22,8 +22,8 @@ export const CATEGORIES = [
 export type Category = (typeof CATEGORIES)[number];
 
 @Entity()
-// Covers per-user filtering (WHERE user_id = ?) and the ordered list
-// (ORDER BY created_at) in a single index.
+// Index the per-user filter (WHERE user_id = ?). The (small) per-user result is
+// then sorted in memory; revisit if a single user accumulates thousands of todos.
 @Index({ properties: ["user", "createdAt"] })
 export class Todo extends BaseEntity {
   // Properties with DB/runtime defaults — optional when creating via em.create().
