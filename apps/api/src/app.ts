@@ -44,8 +44,10 @@ export function createApp(): Express {
     res.json({ status: "ok" });
   });
 
-  app.use("/api/auth", authRouter);
-  app.use("/api/todos", requireAuth, todoRouter);
+  // BE owns clean routes; the `/api` prefix is stripped by the gateway (Caddy)
+  // in production and by a Next.js rewrite in development.
+  app.use("/auth", authRouter);
+  app.use("/todos", requireAuth, todoRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -24,14 +24,12 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: postgresql://taskmaster:taskmaster@postgres:5432/taskmaster
-      CORS_ORIGIN: http://localhost:3000
+      CORS_ORIGIN: http://localhost:8080
       # Local/demo secret — override with a real one in production.
       JWT_SECRET: local-dev-secret-change-in-production
       JWT_EXPIRES_IN: 7d
       # This stack is tested over plain HTTP; behind HTTPS drop this (-> Secure).
       COOKIE_SECURE: "false"
-    ports:
-      - "4000:4000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,12 +39,21 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        # Baked into the client bundle at build time — must be the URL the
-        # browser uses to reach the API (not the internal docker hostname).
-        NEXT_PUBLIC_API_URL: http://localhost:4000
-    ports:
-      - "3000:3000"
+        # Empty -> the browser calls the API with relative /api URLs, i.e. the
+        # same origin it was served from (through the proxy). No CORS needed.
+        NEXT_PUBLIC_API_URL: ""
     depends_on:
+      - api
+
+  # Reverse proxy = the single entry point (production-shaped topology).
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - web
       - api
 
 volumes:

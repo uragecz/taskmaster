@@ -1,0 +1,10 @@
+# Single entry point: API under /api/*, everything else to the web app.
+# Swap ":80" for a domain (e.g. example.com) and Caddy provisions HTTPS for you.
+:80 {
+	handle_path /api/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy web:3000
+	}
+}
