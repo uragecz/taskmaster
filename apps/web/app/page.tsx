@@ -2,6 +2,7 @@
 
 import { authApi, todosApi } from "@/lib/api"
 import { useDebounce } from "@/lib/use-debounce"
+import { useRealtimeTodos } from "@/lib/use-realtime-todos"
 import { cn } from "@/lib/utils"
 import {
   keepPreviousData,
@@ -156,6 +157,9 @@ export default function Home() {
     mutationFn: (id: number) => todosApi.remove(id),
     onSuccess: invalidateTodos,
   })
+
+  // Live updates: refresh when this user's todos change in another tab/device.
+  useRealtimeTodos(user?.id)
 
   const addTodo = (e: React.FormEvent) => {
     e.preventDefault()

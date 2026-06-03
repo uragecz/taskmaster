@@ -1,4 +1,4 @@
-import type { RequestHandler } from "express";
+import type { Request, RequestHandler } from "express";
 import { verifyToken } from "../modules/auth/jwt";
 import { HttpError } from "./errorHandler";
 
@@ -25,3 +25,8 @@ export const requireAuth: RequestHandler = (req, _res, next) => {
 
   next();
 };
+
+/** The authenticated user's id. Safe after requireAuth has run. */
+export function getUserId(req: Request): number {
+  return req.userId as number;
+}
