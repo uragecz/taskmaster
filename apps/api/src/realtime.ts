@@ -2,6 +2,7 @@ import type { Server as HttpServer } from "node:http";
 import { Server } from "socket.io";
 import { env } from "./config/env";
 import { logger } from "./config/logger";
+import { readTokenCookie } from "./modules/auth/cookie";
 import { verifyToken } from "./modules/auth/jwt";
 
 let io: Server | undefined;
@@ -42,12 +43,4 @@ export function notifyTodosChanged(userId: number): void {
 export async function closeRealtime(): Promise<void> {
   await io?.close();
   io = undefined;
-}
-
-function readTokenCookie(cookieHeader?: string): string | undefined {
-  for (const part of cookieHeader?.split(";") ?? []) {
-    const [name, ...rest] = part.trim().split("=");
-    if (name === "token") return decodeURIComponent(rest.join("="));
-  }
-  return undefined;
 }
