@@ -1,4 +1,5 @@
 import { RequestContext } from "@mikro-orm/core";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { type Express } from "express";
 import { rateLimit } from "express-rate-limit";
@@ -8,6 +9,8 @@ import { env } from "./config/env";
 import { logger } from "./config/logger";
 import { getORM } from "./db";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
+import { requireAuth } from "./middleware/requireAuth";
+import { authRouter } from "./modules/auth/routes";
 import { todoRouter } from "./modules/todos/routes";
 
 export function createApp(): Express {
@@ -15,7 +18,9 @@ export function createApp(): Express {
 
   app.use(pinoHttp({ logger }));
   app.use(helmet());
-  app.use(cors({ origin: env.CORS_ORIGIN }));
+  // credentials: true so the browser sends/receives the auth cookie.
+  app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+  app.use(cookieParser());
 
   // Per-IP rate limit (after auth this should key on the user / org instead,
   // and move to a shared Redis store once running on multiple replicas).
@@ -39,7 +44,8 @@ export function createApp(): Express {
     res.json({ status: "ok" });
   });
 
-  app.use("/api/todos", todoRouter);
+  app.use("/api/auth", authRouter);
+  app.use("/api/todos", requireAuth, todoRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

@@ -1,5 +1,13 @@
-import { Entity, Enum, OptionalProps, Property } from "@mikro-orm/core";
+import {
+  Entity,
+  Enum,
+  Index,
+  ManyToOne,
+  OptionalProps,
+  Property,
+} from "@mikro-orm/core";
 import { BaseEntity } from "./BaseEntity";
+import { User } from "./User";
 
 export const PRIORITIES = ["low", "medium", "high"] as const;
 export type Priority = (typeof PRIORITIES)[number];
@@ -14,6 +22,9 @@ export const CATEGORIES = [
 export type Category = (typeof CATEGORIES)[number];
 
 @Entity()
+// Covers per-user filtering (WHERE user_id = ?) and the ordered list
+// (ORDER BY created_at) in a single index.
+@Index({ properties: ["user", "createdAt"] })
 export class Todo extends BaseEntity {
   // Properties with DB/runtime defaults — optional when creating via em.create().
   [OptionalProps]?: "done" | "priority" | "category" | "createdAt" | "updatedAt";
@@ -35,4 +46,7 @@ export class Todo extends BaseEntity {
 
   @Property({ type: "datetime", nullable: true })
   completedAt?: Date | null;
+
+  @ManyToOne(() => User)
+  user!: User;
 }

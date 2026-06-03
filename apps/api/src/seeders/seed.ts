@@ -1,10 +1,25 @@
 import "reflect-metadata";
-import type { RequiredEntityData } from "@mikro-orm/core";
+import bcrypt from "bcryptjs";
 import { closeORM, initORM } from "../db";
-import { Todo } from "../entities/Todo";
+import { type Category, type Priority, Todo } from "../entities/Todo";
+import { User } from "../entities/User";
 
-/** Initial demo data — mirrors the todos the assignment shipped with. */
-const SEED: RequiredEntityData<Todo>[] = [
+// Demo credentials come from the environment (documented in .env.example).
+const DEMO_EMAIL = process.env.SEED_USER_EMAIL ?? "demo@taskmaster.dev";
+const DEMO_PASSWORD = process.env.SEED_USER_PASSWORD ?? "demo1234";
+
+/** Demo todos (without an owner — the seed assigns the demo user). */
+interface SeedTodo {
+  text: string;
+  done?: boolean;
+  priority?: Priority;
+  category?: Category;
+  dueDate?: string;
+  completedAt?: Date;
+  createdAt?: Date;
+}
+
+const SEED: SeedTodo[] = [
   {
     text: "Complete project proposal",
     done: false,
@@ -51,18 +66,23 @@ async function seed(): Promise<void> {
   const em = orm.em.fork();
 
   await em.nativeDelete(Todo, {});
+  await em.nativeDelete(User, {});
+
+  const user = em.create(User, {
+    email: DEMO_EMAIL,
+    passwordHash: await bcrypt.hash(DEMO_PASSWORD, 10),
+  });
+
   for (const data of SEED) {
-    em.create(Todo, data);
+    em.create(Todo, { ...data, user });
   }
   await em.flush();
 
-  // eslint-disable-next-line no-console
-  console.log(`🌱 Seeded ${SEED.length} todos`);
+  console.log(`🌱 Seeded ${SEED.length} todos for ${DEMO_EMAIL}`);
   await closeORM();
 }
 
 seed().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error("Seed failed:", err);
   process.exit(1);
 });

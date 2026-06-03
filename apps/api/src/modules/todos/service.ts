@@ -1,5 +1,6 @@
 import type { EntityManager } from "@mikro-orm/postgresql";
 import { Todo } from "../../entities/Todo";
+import { User } from "../../entities/User";
 import { HttpError } from "../../middleware/errorHandler";
 import { TodoRepository, type TodoStats } from "./repository";
 import type {
@@ -9,8 +10,8 @@ import type {
 } from "./validation";
 
 /**
- * Business logic for todos. Coordinates the repository and the unit of work
- * (flush), and owns rules like "completedAt follows the done flag".
+ * Business logic for todos. Every operation is scoped to a user id so callers
+ * can only touch their own todos. Owns rules like "completedAt follows done".
  */
 export class TodoService {
   private readonly repo: TodoRepository;
@@ -19,27 +20,32 @@ export class TodoService {
     this.repo = new TodoRepository(em);
   }
 
-  list(filters: ListTodoQuery): Promise<Todo[]> {
-    return this.repo.findWithFilters(filters);
+  list(filters: ListTodoQuery, userId: number): Promise<Todo[]> {
+    return this.repo.findWithFilters(filters, userId);
   }
 
-  stats(): Promise<TodoStats> {
-    return this.repo.getStats();
+  stats(userId: number): Promise<TodoStats> {
+    return this.repo.getStats(userId);
   }
 
-  async create(input: CreateTodoInput): Promise<Todo> {
+  async create(input: CreateTodoInput, userId: number): Promise<Todo> {
     const todo = this.em.create(Todo, {
       text: input.text,
       priority: input.priority ?? "medium",
       category: input.category ?? "other",
       dueDate: input.dueDate ?? null,
+      user: this.em.getReference(User, userId),
     });
     await this.em.persist(todo).flush();
     return todo;
   }
 
-  async update(id: number, input: UpdateTodoInput): Promise<Todo> {
-    const todo = await this.repo.findById(id);
+  async update(
+    id: number,
+    input: UpdateTodoInput,
+    userId: number,
+  ): Promise<Todo> {
+    const todo = await this.repo.findById(id, userId);
     if (!todo) throw new HttpError(404, "Todo not found");
 
     if (input.text !== undefined) todo.text = input.text;
@@ -55,8 +61,8 @@ export class TodoService {
     return todo;
   }
 
-  async remove(id: number): Promise<void> {
-    const todo = await this.repo.findById(id);
+  async remove(id: number, userId: number): Promise<void> {
+    const todo = await this.repo.findById(id, userId);
     if (!todo) throw new HttpError(404, "Todo not found");
     await this.em.remove(todo).flush();
   }

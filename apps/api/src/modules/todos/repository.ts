@@ -11,14 +11,14 @@ export interface TodoStats {
 }
 
 /**
- * Data-access layer for todos. Owns all query building so the service stays
- * focused on business rules. Bound to the request-scoped EntityManager.
+ * Data-access layer for todos. Every query is scoped to a user id, so users
+ * only ever see their own todos. Bound to the request-scoped EntityManager.
  */
 export class TodoRepository {
   constructor(private readonly em: EntityManager) {}
 
-  findWithFilters(filters: ListTodoQuery): Promise<Todo[]> {
-    const where: FilterQuery<Todo> = {};
+  findWithFilters(filters: ListTodoQuery, userId: number): Promise<Todo[]> {
+    const where: FilterQuery<Todo> = { user: userId };
 
     if (filters.category) where.category = filters.category;
     if (filters.priority) where.priority = filters.priority;
@@ -29,19 +29,30 @@ export class TodoRepository {
     return this.em.find(Todo, where, { orderBy: { createdAt: "asc" } });
   }
 
-  findById(id: number): Promise<Todo | null> {
-    return this.em.findOne(Todo, { id });
+  findById(id: number, userId: number): Promise<Todo | null> {
+    return this.em.findOne(Todo, { id, user: userId });
   }
 
-  async getStats(): Promise<TodoStats> {
+  /** All four stats in a single aggregate query (one round-trip). */
+  async getStats(userId: number): Promise<TodoStats> {
     const today = new Date().toISOString().slice(0, 10);
+    const knex = this.em.getKnex();
 
-    const [total, completed, overdue] = await Promise.all([
-      this.em.count(Todo, {}),
-      this.em.count(Todo, { done: true }),
-      this.em.count(Todo, { done: false, dueDate: { $lt: today } }),
-    ]);
+    const row = await knex("todo")
+      .where("user_id", userId)
+      .select(
+        knex.raw("count(*)::int as total"),
+        knex.raw("count(*) filter (where done)::int as completed"),
+        knex.raw(
+          "count(*) filter (where not done and due_date < ?)::int as overdue",
+          [today],
+        ),
+      )
+      .first<{ total: number; completed: number; overdue: number }>();
 
+    const total = row?.total ?? 0;
+    const completed = row?.completed ?? 0;
+    const overdue = row?.overdue ?? 0;
     return { total, completed, active: total - completed, overdue };
   }
 }

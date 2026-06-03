@@ -25,6 +25,11 @@ services:
       PORT: 4000
       DATABASE_URL: postgresql://taskmaster:taskmaster@postgres:5432/taskmaster
       CORS_ORIGIN: http://localhost:3000
+      # Local/demo secret — override with a real one in production.
+      JWT_SECRET: local-dev-secret-change-in-production
+      JWT_EXPIRES_IN: 7d
+      # This stack is tested over plain HTTP; behind HTTPS drop this (-> Secure).
+      COOKIE_SECURE: "false"
     ports:
       - "4000:4000"
     depends_on:
