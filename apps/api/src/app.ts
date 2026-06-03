@@ -20,7 +20,16 @@ export function createApp(): Express {
   // which the per-IP auth limiter keys on — not the proxy's IP.
   app.set("trust proxy", 1);
 
-  app.use(pinoHttp({ logger }));
+  // Concise request logs (no header dump -> no leaked tokens, less noise).
+  app.use(
+    pinoHttp({
+      logger,
+      serializers: {
+        req: (req) => ({ id: req.id, method: req.method, url: req.url }),
+        res: (res) => ({ statusCode: res.statusCode }),
+      },
+    }),
+  );
   app.use(helmet());
   // credentials: true so the browser sends/receives the auth cookie.
   app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
