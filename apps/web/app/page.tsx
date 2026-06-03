@@ -25,6 +25,7 @@ import {
   X,
 } from "lucide-react"
 import { useState } from "react"
+import { toast } from "sonner"
 import { AuthForm } from "./auth-form"
 
 type Priority = "low" | "medium" | "high"
@@ -147,15 +148,18 @@ export default function Home() {
   const createMutation = useMutation({
     mutationFn: (body: unknown) => todosApi.create(body),
     onSuccess: invalidateTodos,
+    onError: () => toast.error("Couldn't add the task. Please try again."),
   })
   const updateMutation = useMutation({
     mutationFn: ({ id, body }: { id: number; body: unknown }) =>
       todosApi.update(id, body),
     onSuccess: invalidateTodos,
+    onError: () => toast.error("Couldn't update the task. Please try again."),
   })
   const deleteMutation = useMutation({
     mutationFn: (id: number) => todosApi.remove(id),
     onSuccess: invalidateTodos,
+    onError: () => toast.error("Couldn't delete the task. Please try again."),
   })
 
   // Live updates: refresh when this user's todos change in another tab/device.
@@ -489,7 +493,8 @@ export default function Home() {
                   <div
                     key={todo.id}
                     className={cn(
-                      "group relative flex items-start gap-3 p-4 rounded-xl border transition-all duration-200",
+                      "group relative flex items-start gap-3 p-4 rounded-xl border transition-all duration-300",
+                      todo.done && "opacity-60",
                       isOverdue(todo)
                         ? "bg-red-500/10 border-red-500/30"
                         : "bg-white/5 border-white/5 hover:bg-white/10 hover:border-white/20"

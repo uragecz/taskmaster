@@ -2,6 +2,7 @@
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { type ReactNode, useState } from "react"
+import { Toaster } from "sonner"
 
 export function Providers({ children }: { children: ReactNode }) {
   // One QueryClient per browser session (kept stable across re-renders).
@@ -15,6 +16,9 @@ export function Providers({ children }: { children: ReactNode }) {
   )
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <Toaster richColors position="bottom-center" />
+    </QueryClientProvider>
   )
 }
