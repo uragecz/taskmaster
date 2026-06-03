@@ -2,13 +2,13 @@ import { RequestContext } from "@mikro-orm/core";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { type Express } from "express";
-import { rateLimit } from "express-rate-limit";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { env } from "./config/env";
 import { logger } from "./config/logger";
 import { getORM } from "./db";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
+import { apiLimiter, authLimiter } from "./middleware/rateLimiters";
 import { requireAuth } from "./middleware/requireAuth";
 import { authRouter } from "./modules/auth/routes";
 import { todoRouter } from "./modules/todos/routes";
@@ -16,25 +16,15 @@ import { todoRouter } from "./modules/todos/routes";
 export function createApp(): Express {
   const app = express();
 
+  // Trust the single proxy hop (Caddy) so req.ip is the real client address,
+  // which the per-IP auth limiter keys on — not the proxy's IP.
+  app.set("trust proxy", 1);
+
   app.use(pinoHttp({ logger }));
   app.use(helmet());
   // credentials: true so the browser sends/receives the auth cookie.
   app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
   app.use(cookieParser());
-
-  // Per-IP rate limit (after auth this should key on the user / org instead,
-  // and move to a shared Redis store once running on multiple replicas).
-  if (env.NODE_ENV !== "test") {
-    app.use(
-      rateLimit({
-        windowMs: 60_000,
-        limit: 100,
-        standardHeaders: "draft-7",
-        legacyHeaders: false,
-      }),
-    );
-  }
-
   app.use(express.json());
 
   // Fresh MikroORM identity map per request (avoids sharing one EntityManager).
@@ -46,8 +36,9 @@ export function createApp(): Express {
 
   // BE owns clean routes; the `/api` prefix is stripped by the gateway (Caddy)
   // in production and by a Next.js rewrite in development.
-  app.use("/auth", authRouter);
-  app.use("/todos", requireAuth, todoRouter);
+  app.use("/auth", authLimiter, authRouter);
+  // apiLimiter runs after requireAuth so it can key on req.userId.
+  app.use("/todos", requireAuth, apiLimiter, todoRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
