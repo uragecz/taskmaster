@@ -1,34 +1,57 @@
 # TaskMaster
 
 A full-stack task manager: a Next.js frontend talking to an Express + MikroORM
-API backed by PostgreSQL, organized as a pnpm monorepo.
+API backed by PostgreSQL, with cookie-based auth and live updates over
+WebSockets. Organized as a pnpm monorepo and fronted by a Caddy reverse proxy.
 
 ## Tech stack
 
-| Layer    | Choice                                             |
-| -------- | -------------------------------------------------- |
-| Frontend | Next.js 16 (App Router) + React Query              |
+| Layer    | Choice                                                                    |
+| -------- | ------------------------------------------------------------------------- |
+| Frontend | Next.js 16 (App Router) + React Query                                     |
 | Backend  | Express + TypeScript, layered (route → controller → service → repository) |
-| ORM / DB | MikroORM + PostgreSQL                               |
-| Auth     | _planned_ (see `HANDOVER.md`)                      |
-| Tooling  | pnpm workspaces, Docker, Vitest + Supertest        |
+| ORM / DB | MikroORM + PostgreSQL                                                     |
+| Auth     | JWT in an httpOnly cookie + bcrypt; todos scoped per user                 |
+| Realtime | Socket.io (per-user rooms)                                                |
+| Gateway  | Caddy reverse proxy (single origin, automatic HTTPS in prod)              |
+| Tooling  | pnpm workspaces, Docker, Vitest + Supertest                              |
 
-See [`PLAN.md`](./PLAN.md) for the delivery strategy and the architecture
-decision behind a standalone backend (vs. Next.js API routes).
+See [`PLAN.md`](./PLAN.md) for the delivery strategy and [`HANDOVER.md`](./HANDOVER.md)
+for the remaining backlog.
 
-## Repository layout
+## Architecture
+
+```
+browser ─→ Caddy (:8080) ─┬─ /api/*  → api:4000   (Caddy strips /api)
+                          └─ /*      → web:3000
+```
+
+Everything is one origin, so there is no CORS and the auth cookie is same-origin.
+The backend owns clean routes (`/todos`, `/auth`, `/health`); the `/api` prefix is
+a gateway concern (stripped by Caddy in prod, by a Next.js rewrite in dev).
 
 ```
 apps/
   web/        Next.js frontend (pure client of the API)
   api/        Express + MikroORM backend
-docker-compose.yml   postgres + api + web
+Caddyfile            reverse-proxy routing
+docker-compose.yml   postgres + api + web + caddy
 ```
 
 ## Prerequisites
 
 - **Node.js LTS** (v20+, developed on v24) and **pnpm** (via Corepack)
-- **Docker** + Docker Compose (for PostgreSQL locally and for the container build)
+- **Docker** + Docker Compose
+
+## Quick start (Docker)
+
+```bash
+docker compose up --build
+```
+
+Brings up `postgres`, `api` (runs migrations on start), `web` and `caddy`. Then
+open **http://localhost:8080** and **register an account** (or seed the demo user
+below).
 
 ## Local development
 
@@ -42,17 +65,17 @@ docker compose up -d postgres
 # 3. set up the API env + database
 cp apps/api/.env.example apps/api/.env
 pnpm --filter @taskmaster/api migration:up
-pnpm --filter @taskmaster/api seed        # optional demo data
+pnpm --filter @taskmaster/api seed        # optional: demo@taskmaster.dev / demo1234
 
 # 4. set up the web env
 cp apps/web/.env.example apps/web/.env.local
 
-# 5. run both apps (web :3000, api :4000)
+# 5. run both apps
 pnpm dev
 ```
 
-- Web: http://localhost:3000
-- API: http://localhost:4000 (`/health`, `/api/todos`)
+Open http://localhost:3000. In dev a Next.js rewrite forwards `/api/*` to the API
+on `:4000`, mirroring the production proxy.
 
 ## Tests
 
@@ -60,93 +83,42 @@ pnpm dev
 pnpm --filter @taskmaster/api test
 ```
 
-Integration tests (Vitest + Supertest) run against a dedicated `taskmaster_test`
-database, which is created automatically (requires the Postgres container).
-
-## Running the whole stack in Docker
-
-```bash
-docker compose up --build
-```
-
-Brings up `postgres`, `api` (runs migrations on start) and `web`, all wired
-together. Open http://localhost:3000.
+Integration tests (Vitest + Supertest) cover auth, validation and cross-user
+isolation. They run against a dedicated `taskmaster_test` database that is created
+automatically (requires the Postgres container).
 
 ## Environment variables
 
 **API** (`apps/api/.env`)
 
-| Variable       | Example                                                   |
-| -------------- | --------------------------------------------------------- |
-| `NODE_ENV`     | `development` / `production`                               |
-| `PORT`         | `4000`                                                     |
-| `DATABASE_URL` | `postgresql://taskmaster:taskmaster@localhost:5432/taskmaster` |
-| `CORS_ORIGIN`  | `http://localhost:3000` (the web origin)                  |
+| Variable                  | Notes                                                       |
+| ------------------------- | ----------------------------------------------------------- |
+| `NODE_ENV`                | `development` / `production`                                |
+| `PORT`                    | `4000`                                                      |
+| `DATABASE_URL`            | `postgresql://taskmaster:taskmaster@localhost:5432/taskmaster` |
+| `CORS_ORIGIN`             | web origin (unused with the single-origin proxy)            |
+| `JWT_SECRET`              | secret for signing auth tokens (16+ chars)                  |
+| `JWT_EXPIRES_IN`          | token lifetime, e.g. `7d`                                   |
+| `COOKIE_SECURE`           | `true`/`false`; defaults to on in production (HTTPS)        |
+| `SEED_USER_EMAIL/PASSWORD`| demo account created by `pnpm seed` (dev only)              |
 
 **Web** (`apps/web/.env.local`)
 
-| Variable              | Notes                                                |
-| --------------------- | ---------------------------------------------------- |
-| `NEXT_PUBLIC_API_URL` | Base URL the **browser** uses to reach the API. Inlined at build time. |
-
-> `NEXT_PUBLIC_API_URL` is baked into the client bundle during `next build`, so
-> it must be the URL the browser can reach — not an internal Docker hostname.
+| Variable              | Notes                                                          |
+| --------------------- | -------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL` | leave empty → the browser calls the API on the same origin (`/api/*`). Set an absolute URL only if the API is on a different origin. Inlined at build time. |
 
 ## Deploying to a VM
 
-The whole stack is just `docker compose up`, so any Linux VM with Docker works
-(Hetzner, DigitalOcean, AWS EC2, …).
+The whole stack (incl. the proxy) is `docker compose up`, so any Linux VM with
+Docker works (Hetzner, DigitalOcean, AWS EC2, …).
 
-**1. Provision a VM** (e.g. Ubuntu 24.04) and open ports `80`/`443` (and `22`).
+1. Provision a VM (e.g. Ubuntu 24.04), open ports `80`/`443`.
+2. Install Docker: `curl -fsSL https://get.docker.com | sh`
+3. Get the code and point the `Caddyfile` at your domain — replace `:80` with
+   `example.com` and Caddy provisions HTTPS automatically.
+4. Set production secrets (a real `JWT_SECRET`, drop `COOKIE_SECURE=false` so the
+   cookie is `Secure`) and run `docker compose up -d --build`.
 
-**2. Install Docker:**
-
-```bash
-curl -fsSL https://get.docker.com | sh
-```
-
-**3. Get the code** (`git clone` the repo, or copy it over).
-
-**4. Configure production values.** The API URL is baked into the web image at
-build time, so set it to your public domain. With a reverse proxy serving the
-API under the same origin (recommended), web and API share one domain — so CORS
-is trivially satisfied:
-
-```yaml
-# docker-compose.override.yml
-services:
-  api:
-    environment:
-      NODE_ENV: production
-      CORS_ORIGIN: https://example.com
-  web:
-    build:
-      args:
-        NEXT_PUBLIC_API_URL: https://example.com
-```
-
-**5. Start it:**
-
-```bash
-docker compose up -d --build
-```
-
-**6. Put a reverse proxy in front** for HTTPS. [Caddy](https://caddyserver.com)
-gives you automatic TLS — example `Caddyfile`:
-
-```
-example.com {
-    handle /api/* {
-        reverse_proxy localhost:4000
-    }
-    handle {
-        reverse_proxy localhost:3000
-    }
-}
-```
-
-This routes `example.com/api/*` to the API and everything else to the web app,
-on one origin behind TLS.
-
-> When running behind a proxy, set `app.set("trust proxy", 1)` in the API so the
-> per-IP rate limiter sees the real client IP (tracked in `HANDOVER.md`).
+> Behind a proxy, set `app.set("trust proxy", 1)` in the API so the per-IP rate
+> limiter sees the real client IP (tracked in `HANDOVER.md`).
